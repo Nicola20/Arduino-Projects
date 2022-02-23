@@ -36,7 +36,9 @@ uint16_t currtouched = 0;
 
 /*Define stuff for the Neopixel Ring*/
 // Which pin on the Arduino is connected to the NeoPixels?
-#define PIN        6 // On Trinket or Gemma, suggest changing this to 1
+#define PIN 6 // On Trinket or Gemma, suggest changing this to 1
+
+#define MAX_GLOWING_PIXELS 4
 
 // Define number of NeoPixels that are attached to the Arduino
 #define NUMPIXELS 24 
@@ -65,6 +67,9 @@ bool on = false;
 int brightness = 0;
 bool max_brightness = false;
 bool run_fire_effect = true;
+bool run_firefly_effect = true;
+int tmp = 1;
+
 
 uint32_t start_color = green;
 
@@ -200,7 +205,78 @@ void NeoFire::Clear() {
     pixels.setPixelColor(i, off_color);
 }
 
-NeoFire fire(pixels);
+
+/* Stuff for the Firefly effect */
+class Firefly {
+  private:
+    float _brightness;
+    float _fadeSpeed;
+    float _hue;
+    boolean _isGlowing;
+    
+  public:
+    Firefly ();
+  
+    float hueCenter;
+    float hueRange;
+    float baseSpeed;
+    boolean isGlowing();    
+    uint32_t getColor();
+    
+    void ignite();
+    void animate();    
+};
+
+Firefly::Firefly () {
+  hueCenter = 0.80;
+  hueRange = 0.2;
+  baseSpeed = 0.02;
+  _brightness = 0.0;
+  _fadeSpeed = 0.0;
+  _isGlowing = false;
+}
+
+void Firefly::ignite() {
+  _hue = hueCenter + (random(100)-50)*0.01*hueRange;
+  _fadeSpeed = baseSpeed*(random(100)*0.01 + 0.5);
+  _isGlowing = true;
+}
+
+boolean Firefly::isGlowing() {
+  return _isGlowing;
+}
+
+void Firefly::animate() {
+  if(!_isGlowing) {
+    return;
+  }
+  
+  _brightness += _fadeSpeed;
+    
+  if(_brightness > 1.0) {
+    _brightness = 1.0;
+    _fadeSpeed *= -0.3;
+  } else if(_brightness < 0.0) {
+    _brightness = 0.0;
+    _fadeSpeed = 0.0;
+    _isGlowing = false;
+  }
+}
+
+uint32_t Firefly::getColor() {
+  uint8_t w = 255*_hue;
+  if(w < 85) {
+    return Adafruit_NeoPixel::Color(w*3*_brightness, (255-w*3)*_brightness, 0);
+  } else if(w < 170) {
+    w -= 85;
+    return Adafruit_NeoPixel::Color((255-w*3)*_brightness, 0, w*3*_brightness);
+  } else {
+    w -= 170;
+    return Adafruit_NeoPixel::Color(0, w*3*_brightness, (255-w*3)*_brightness);
+  }  
+}
+
+
 
 void rainbox_fade() {
     for (int j = 0; j < (sizeof(colors)/sizeof(colors[0])); j++) {
@@ -229,13 +305,13 @@ void rainbox_fade() {
       delay(70);
     }
   }
+  return;
 }
 
-void loop() {
-  currtouched = cap.touched();
 
-  for (uint8_t i=0; i<12; i++) {
-    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 0)) { 
+void power(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
+      if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 0)) { 
+      Serial.print("I was touched "); Serial.print(on); Serial.println(i);
       if (on == false) {
           on = true;
           for (int i = 0; i < NUMPIXELS; i ++) {
@@ -249,23 +325,91 @@ void loop() {
         pixels.show();
       }
     }
+    return;
+}
 
-    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 1)) {
+
+// Initialize the classes for the effects
+Firefly flies[NUMPIXELS];
+NeoFire fire(pixels);
+
+
+void loop() {
+  currtouched = cap.touched();
+
+  for (uint8_t i=0; i<12; i++) {
+    power(currtouched, lasttouched, i);
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 10)) {
       //pixels.clear();
-      while (run_fire_effect) {
-          currtouched = cap.touched();
-          for (uint8_t j = 0; j < 12; j++){
-            if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
-              run_fire_effect = false;
+      Serial.print("I was touched "); Serial.print(on); Serial.println(i);
+      //if (on) {
+        while (run_fire_effect && on) {
+            currtouched = cap.touched();
+            for (uint8_t j = 0; j < 12; j++){
+              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                run_fire_effect = false;
+                if (j == 0) {
+                  power(currtouched, lasttouched, j);
+                  tmp = j;
+                }
+              }
             }
+          if (tmp != 0) {
+            fire.Draw();
+            delay(random(50,150)); 
           }
-        fire.Draw();
-        delay(random(50,150)); 
-      }
-      // next 2 lines not really needed when other taps are initialized
-      pixels.clear();
-      pixels.show();
-      run_fire_effect = true;
+        }
+        // next 2 lines not really needed when other taps are initialized
+        //pixels.clear();
+        //pixels.show();
+        run_fire_effect = true;
+        tmp = 1;
+      //}
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 11)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.print(on); Serial.println(i);
+      //if (on) {
+        while (run_firefly_effect && on) {
+            currtouched = cap.touched();
+            for (uint8_t j = 0; j < 12; j++){
+              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                run_firefly_effect = false;
+                 if (j == 0) {
+                  power(currtouched, lasttouched, j);
+                  tmp = j;
+                }
+              }
+            }
+            if (tmp != 0) {
+              int glowingPixelCount = 0;
+              // do we have enough lit pixels?
+              for(int i = 0; i < NUMPIXELS; i++) {
+                if(flies[i].isGlowing()) {
+                  glowingPixelCount++;
+                }
+              }
+              
+              for(int i = 0; i < NUMPIXELS; i++) {
+                if(!flies[i].isGlowing() && glowingPixelCount < MAX_GLOWING_PIXELS && random(100) < 5) {
+                  flies[i].ignite();
+                  glowingPixelCount++;
+                }
+                flies[i].animate();
+                pixels.setPixelColor(i, flies[i].getColor());
+              }
+              pixels.show();
+              delay(30); 
+          }
+        }
+        // next 2 lines not really needed when other taps are initialized
+        //pixels.clear();
+        //pixels.show();
+        run_firefly_effect = true;
+        tmp = 1;
+      //}
     }
   }
 
