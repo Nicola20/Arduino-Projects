@@ -38,8 +38,8 @@ uint16_t currtouched = 0;
 // Which pin on the Arduino is connected to the NeoPixels?
 #define PIN        6 // On Trinket or Gemma, suggest changing this to 1
 
-// How many NeoPixels are attached to the Arduino?
-#define NUMPIXELS 24 // Popular NeoPixel ring size
+// Define number of NeoPixels that are attached to the Arduino
+#define NUMPIXELS 24 
 
 // When setting up the NeoPixel library, we tell it how many pixels,
 // and which pin to use to send signals. Note that for older NeoPixel
@@ -55,6 +55,8 @@ uint32_t white = pixels.Color(255,255,255);
 uint32_t pink = pixels.Color(255,0,100);
 uint32_t cyan = pixels.Color(0,255,255);
 uint32_t orange = pixels.Color(230,80,0);
+uint32_t fire_color = pixels.Color(80, 35, 00);
+uint32_t off_color = pixels.Color(0, 0, 0);
 uint32_t  colors[] = {red, green, blue, yellow, white, pink, cyan, orange};
 
 // Variable that decides whether the pixelring should light up or not and the different colors
@@ -62,6 +64,7 @@ bool on = false;
 
 int brightness = 0;
 bool max_brightness = false;
+bool run_fire_effect = true;
 
 uint32_t start_color = green;
 
@@ -102,6 +105,103 @@ void setup() {
   
 }
 
+// Fire simulator
+class NeoFire
+{
+  Adafruit_NeoPixel &pixels;
+  public:
+
+    NeoFire(Adafruit_NeoPixel&);
+    void Draw();
+    void Clear();
+    void AddColor(uint8_t position, uint32_t color);
+    void SubstractColor(uint8_t position, uint32_t color);
+    uint32_t Blend(uint32_t color1, uint32_t color2);
+    uint32_t Substract(uint32_t color1, uint32_t color2);
+};
+
+
+// Constructor
+NeoFire::NeoFire(Adafruit_NeoPixel& n_pixels): pixels (n_pixels) {
+}
+
+// Set all colors
+void NeoFire::Draw() {
+  Clear();
+
+  for(int i = 0; i < NUMPIXELS; i++) {
+    AddColor(i, fire_color);
+    int r = random(80);
+    uint32_t diff_color = pixels.Color ( r, r/2, r/2);
+    SubstractColor(i, diff_color);
+  }
+    
+  pixels.show();
+}
+
+
+// Set color of LED
+void NeoFire::AddColor(uint8_t position, uint32_t color) {
+  uint32_t blended_color = Blend(pixels.getPixelColor(position), color);
+  pixels.setPixelColor(position, blended_color);
+}
+
+// Set color of LED
+void NeoFire::SubstractColor(uint8_t position, uint32_t color) {
+  uint32_t blended_color = Substract(pixels.getPixelColor(position), color);
+  pixels.setPixelColor(position, blended_color);
+}
+
+// Color blending
+uint32_t NeoFire::Blend(uint32_t color1, uint32_t color2) {
+  uint8_t r1,g1,b1;
+  uint8_t r2,g2,b2;
+  uint8_t r3,g3,b3;
+  
+  r1 = (uint8_t)(color1 >> 16),
+  g1 = (uint8_t)(color1 >>  8),
+  b1 = (uint8_t)(color1 >>  0);
+  
+  r2 = (uint8_t)(color2 >> 16),
+  g2 = (uint8_t)(color2 >>  8),
+  b2 = (uint8_t)(color2 >>  0);
+  
+  return pixels.Color(constrain(r1+r2, 0, 255), constrain(g1+g2, 0, 255), constrain(b1+b2, 0, 255));
+}
+
+// Color blending
+uint32_t NeoFire::Substract(uint32_t color1, uint32_t color2) {
+  uint8_t r1,g1,b1;
+  uint8_t r2,g2,b2;
+  uint8_t r3,g3,b3;
+  int16_t r,g,b;
+  
+  r1 = (uint8_t)(color1 >> 16),
+  g1 = (uint8_t)(color1 >>  8),
+  b1 = (uint8_t)(color1 >>  0);
+  
+  r2 = (uint8_t)(color2 >> 16),
+  g2 = (uint8_t)(color2 >>  8),
+  b2 = (uint8_t)(color2 >>  0);
+  
+  r=(int16_t)r1-(int16_t)r2;
+  g=(int16_t)g1-(int16_t)g2;
+  b=(int16_t)b1-(int16_t)b2;
+  if(r<0) r=0;
+  if(g<0) g=0;
+  if(b<0) b=0;
+  
+  return pixels.Color(r, g, b);
+}
+
+// Every LED to black
+void NeoFire::Clear() {
+  for(uint16_t i = 0; i < pixels.numPixels(); i++)
+    pixels.setPixelColor(i, off_color);
+}
+
+NeoFire fire(pixels);
+
 void rainbox_fade() {
     for (int j = 0; j < (sizeof(colors)/sizeof(colors[0])); j++) {
     for (int h = 0; h < 102; h++) {
@@ -132,8 +232,6 @@ void rainbox_fade() {
 }
 
 void loop() {
-
-  // Get the currently touched pads
   currtouched = cap.touched();
 
   for (uint8_t i=0; i<12; i++) {
@@ -151,41 +249,32 @@ void loop() {
         pixels.show();
       }
     }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 1)) {
+      //pixels.clear();
+      while (run_fire_effect) {
+          currtouched = cap.touched();
+          for (uint8_t j = 0; j < 12; j++){
+            if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+              run_fire_effect = false;
+            }
+          }
+        fire.Draw();
+        delay(random(50,150)); 
+      }
+      // next 2 lines not really needed when other taps are initialized
+      pixels.clear();
+      pixels.show();
+      run_fire_effect = true;
+    }
   }
 
-  
-  //Serial.println(currtouched);
- /* for (uint8_t i=0; i<12; i++) {
-    // it if *is* touched and *wasnt* touched before, alert!
-    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
-      Serial.print(i); Serial.println(" touched");
-    }
-
-    
-    // if it *was* touched and now *isnt*, alert!
-    if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
-      Serial.print(i); Serial.println(" released");
-    }
-  }*/
 
   // reset our state
   lasttouched = currtouched;
 
   // comment out this line for detailed data from the sensor!
   return;
-  
-  // debugging info, what
-  Serial.print("\t\t\t\t\t\t\t\t\t\t\t\t\t 0x"); Serial.println(cap.touched(), HEX);
-  Serial.print("Filt: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(cap.filteredData(i)); Serial.print("\t");
-  }
-  Serial.println();
-  Serial.print("Base: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(cap.baselineData(i)); Serial.print("\t");
-  }
-  Serial.println();
   
   // put a delay so it isn't overwhelming
   delay(100);
