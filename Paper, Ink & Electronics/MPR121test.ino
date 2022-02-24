@@ -1,23 +1,19 @@
 /*********************************************************
-This is a library for the MPR121 12-channel Capacitive touch sensor
+This code controls a Neopixel ring with the help of a 
+capacity sensor that acts as buttons for the different 
+effects and colors.
 
-Designed specifically to work with the MPR121 Breakout in the Adafruit shop 
-  ----> https://www.adafruit.com/products/
+Code for the Paper, Ink & Electronics modul @ Bauhaus-
+Universität Weimar.
 
-These sensors use I2C communicate, at least 2 pins are required 
-to interface
+Author: Nicola Libera
 
-Adafruit invests time and resources providing this open source code, 
-please support Adafruit and open-source hardware by purchasing 
-products from Adafruit!
-
-Written by Limor Fried/Ladyada for Adafruit Industries.  
-BSD license, all text above must be included in any redistribution
 **********************************************************/
 
 #include <Wire.h>
 #include "Adafruit_MPR121.h"
 #include <Adafruit_NeoPixel.h>
+#include "FastLED.h"
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
@@ -44,9 +40,7 @@ uint16_t currtouched = 0;
 #define NUMPIXELS 24 
 
 // When setting up the NeoPixel library, we tell it how many pixels,
-// and which pin to use to send signals. Note that for older NeoPixel
-// strips you might need to change the third parameter -- see the
-// strandtest example for more information on possible values.
+// and which pin to use to send signals.
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 uint32_t red = pixels.Color(255,0,0);
@@ -67,13 +61,11 @@ bool on = false;
 int brightness = 0;
 bool max_brightness = false;
 bool run_fire_effect = true;
+bool run_rainbow_fade_effect = true;
 bool run_firefly_effect = true;
+bool run_meteor_effect = true;
 int tmp = 1;
-
-
 uint32_t start_color = green;
-
-#define DELAYVAL 500 // Time (in milliseconds) to pause between pixels
 
 
 void setup() {
@@ -278,7 +270,7 @@ uint32_t Firefly::getColor() {
 
 
 
-void rainbox_fade() {
+void rainbow_fade() {
     for (int j = 0; j < (sizeof(colors)/sizeof(colors[0])); j++) {
     for (int h = 0; h < 102; h++) {
       for (int i = 0; i < NUMPIXELS; i ++) {
@@ -305,7 +297,59 @@ void rainbox_fade() {
       delay(70);
     }
   }
-  return;
+}
+
+
+void meteorRain(byte red, byte green, byte blue, byte meteorSize, byte meteorTrailDecay, boolean meteorRandomDecay, int SpeedDelay) {
+
+  for (int i = 0; i < NUMPIXELS; i++) {
+
+    // fade brightness all LEDs one step
+    for (int j = 0; j < NUMPIXELS; j++) {
+      if ((!meteorRandomDecay) || (random(10) > 5)) {
+        fadeToBlack(j, meteorTrailDecay);
+      }
+    }
+
+    // draw meteor
+    for (int j = 0; j < meteorSize; j++) {
+      if ((i - j < NUMPIXELS) && (i - j >= 0)) {
+        setPixel(i - j, red, green, blue);
+      }
+    }
+
+    pixels.show();
+    delay(SpeedDelay);
+  }
+}
+
+void fadeToBlack(int ledNo, byte fadeValue) {
+  uint32_t oldColor;
+  uint8_t r, g, b;
+  int value;
+
+  oldColor = pixels.getPixelColor(ledNo);
+  r = (oldColor & 0x00ff0000UL) >> 16;
+  g = (oldColor & 0x0000ff00UL) >> 8;
+  b = (oldColor & 0x000000ffUL);
+
+  r = (r <= 10) ? 0 : (int) r - (r * fadeValue / 250);
+  g = (g <= 10) ? 0 : (int) g - (g * fadeValue / 250);
+  b = (b <= 10) ? 0 : (int) b - (b * fadeValue / 250);
+
+  pixels.setPixelColor(ledNo, r, g, b);
+}
+
+
+void setPixel(int Pixel, byte red, byte green, byte blue) {
+  pixels.setPixelColor(Pixel, pixels.Color(red, green, blue));
+}
+
+void setAll(byte red, byte green, byte blue) {
+  for (int i = 0; i < NUMPIXELS; i++) {
+    setPixel(i, red, green, blue);
+  }
+  pixels.show();
 }
 
 
@@ -325,7 +369,6 @@ void power(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
         pixels.show();
       }
     }
-    return;
 }
 
 
@@ -338,16 +381,69 @@ void loop() {
   currtouched = cap.touched();
 
   for (uint8_t i=0; i<12; i++) {
+
+    
+    // it if *is* touched and *wasnt* touched before, alert!
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.println(" touched");
+    }
+    
     power(currtouched, lasttouched, i);
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 8)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.print(on); Serial.println(i);
+        while (run_meteor_effect && on) {
+            currtouched = cap.touched();
+            for (uint8_t j = 0; j < 12; j++){
+              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                Serial.print(j); Serial.println(" touched");
+                run_meteor_effect = false;
+                if (j == 0) {
+                  power(currtouched, lasttouched, j);
+                  tmp = j;
+                }
+              }
+            }
+          if (tmp != 0) {
+            meteorRain(0xaa, 0x00, 0xff, 1, 160, true, 120);
+          }
+        }
+        run_meteor_effect = true;
+        tmp = 1;
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 9)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.print(on); Serial.println(i);
+        while (run_rainbow_fade_effect && on) {
+            currtouched = cap.touched();
+            for (uint8_t j = 0; j < 12; j++){
+              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                Serial.print(j); Serial.println(" touched");
+                run_rainbow_fade_effect = false;
+                if (j == 0) {
+                  power(currtouched, lasttouched, j);
+                  tmp = j;
+                }
+              }
+            }
+          if (tmp != 0) {
+            rainbow_fade(); 
+          }
+        }
+        run_rainbow_fade_effect = true;
+        tmp = 1;
+    }
 
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 10)) {
       //pixels.clear();
       Serial.print("I was touched "); Serial.print(on); Serial.println(i);
-      //if (on) {
         while (run_fire_effect && on) {
             currtouched = cap.touched();
             for (uint8_t j = 0; j < 12; j++){
               if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                Serial.print(j); Serial.println(" touched");
                 run_fire_effect = false;
                 if (j == 0) {
                   power(currtouched, lasttouched, j);
@@ -365,17 +461,16 @@ void loop() {
         //pixels.show();
         run_fire_effect = true;
         tmp = 1;
-      //}
     }
 
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 11)) {
       //pixels.clear();
       Serial.print("I was touched "); Serial.print(on); Serial.println(i);
-      //if (on) {
         while (run_firefly_effect && on) {
             currtouched = cap.touched();
             for (uint8_t j = 0; j < 12; j++){
               if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                Serial.print(j); Serial.println(" touched");
                 run_firefly_effect = false;
                  if (j == 0) {
                   power(currtouched, lasttouched, j);
@@ -409,7 +504,6 @@ void loop() {
         //pixels.show();
         run_firefly_effect = true;
         tmp = 1;
-      //}
     }
   }
 
