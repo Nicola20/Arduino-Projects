@@ -35,6 +35,7 @@ uint16_t currtouched = 0;
 #define PIN 6 // On Trinket or Gemma, suggest changing this to 1
 
 #define MAX_GLOWING_PIXELS 4
+#define MIN_BRIGHTNESS 25
 
 // Define number of NeoPixels that are attached to the Arduino
 #define NUMPIXELS 24 
@@ -51,6 +52,7 @@ uint32_t white = pixels.Color(255,255,255);
 uint32_t pink = pixels.Color(255,0,100);
 uint32_t cyan = pixels.Color(0,255,255);
 uint32_t orange = pixels.Color(230,80,0);
+
 uint32_t fire_color = pixels.Color(80, 35, 00);
 uint32_t off_color = pixels.Color(0, 0, 0);
 uint32_t  colors[] = {red, green, blue, yellow, white, pink, cyan, orange};
@@ -74,19 +76,15 @@ void setup() {
   while (!Serial) { // needed to keep leonardo/micro from starting too fast!
     delay(10);
   }
-  Serial.println("I came this far");
+  
   Serial.println("Adafruit MPR121 Capacitive Touch sensor test"); 
-  Serial.println("I came this far");
   
   // Default address is 0x5A, if tied to 3.3V its 0x5B
   // If tied to SDA its 0x5C and if SCL then 0x5D
-  Serial.println("I came this far");
   if (!cap.begin(0x5A)) {
-     Serial.println("I came this far");
     Serial.println("MPR121 not found, check wiring?");
     while (1);
   }
-    Serial.println("I came this far");
   Serial.println("MPR121 found!");
 
   // Stuff for Neopixel init
@@ -300,29 +298,6 @@ void rainbow_fade() {
 }
 
 
-void meteorRain(byte red, byte green, byte blue, byte meteorSize, byte meteorTrailDecay, boolean meteorRandomDecay, int SpeedDelay) {
-
-  for (int i = 0; i < NUMPIXELS; i++) {
-
-    // fade brightness all LEDs one step
-    for (int j = 0; j < NUMPIXELS; j++) {
-      if ((!meteorRandomDecay) || (random(10) > 5)) {
-        fadeToBlack(j, meteorTrailDecay);
-      }
-    }
-
-    // draw meteor
-    for (int j = 0; j < meteorSize; j++) {
-      if ((i - j < NUMPIXELS) && (i - j >= 0)) {
-        setPixel(i - j, red, green, blue);
-      }
-    }
-
-    pixels.show();
-    delay(SpeedDelay);
-  }
-}
-
 void fadeToBlack(int ledNo, byte fadeValue) {
   uint32_t oldColor;
   uint8_t r, g, b;
@@ -372,6 +347,55 @@ void power(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
 }
 
 
+void selectColor(uint32_t col) {
+  if (on) {
+    for (int i = 0; i < NUMPIXELS; i ++) {
+      start_color = col;
+      pixels.setPixelColor(i, start_color);
+    }
+    pixels.show();
+  }
+}
+
+void uniColor(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
+        if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 1)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+        selectColor(cyan);
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 2)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+       selectColor(yellow);
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 3)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+       selectColor(pink);
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 4)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+       selectColor(red);
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 5)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+      selectColor(blue);
+    }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 6)) {
+      //pixels.clear();
+      Serial.print("I was touched "); Serial.println(i);
+        selectColor(green);
+    }
+}
+
+
 // Initialize the classes for the effects
 Firefly flies[NUMPIXELS];
 NeoFire fire(pixels);
@@ -380,60 +404,118 @@ NeoFire fire(pixels);
 void loop() {
   currtouched = cap.touched();
 
-  for (uint8_t i=0; i<12; i++) {
-
-    
+  for (uint8_t i=0; i<12; i++) {    
     // it if *is* touched and *wasnt* touched before, alert!
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
       Serial.print(i); Serial.println(" touched");
     }
     
     power(currtouched, lasttouched, i);
+    uniColor(currtouched, lasttouched, i);
 
-    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 8)) {
+
+      if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 8)) {
       //pixels.clear();
       Serial.print("I was touched "); Serial.print(on); Serial.println(i);
         while (run_meteor_effect && on) {
-            currtouched = cap.touched();
-            for (uint8_t j = 0; j < 12; j++){
-              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
-                Serial.print(j); Serial.println(" touched");
-                run_meteor_effect = false;
-                if (j == 0) {
-                  power(currtouched, lasttouched, j);
-                  tmp = j;
+          if (tmp != 0) {
+            //meteorRain(0xaa, 0x00, 0xff, 1, 160, true, 120); 
+              for (int k = 0; k < NUMPIXELS; k++) {
+
+                // fade brightness all LEDs one step
+                for (int p = 0; p < NUMPIXELS; p++) {
+                  if ((!true) || (random(10) > 5)) {
+                    fadeToBlack(p, 160);
+                  }
+      
+                  currtouched = cap.touched();
+                  for (uint8_t j = 0; j < 12; j++){
+                    if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
+                      Serial.print(j); Serial.println(" touched in meteor");
+                      run_meteor_effect = false;
+                      tmp = 0;
+                      if (j == 0) {
+                        Serial.println("Power off was called in meteor rain");
+                        power(currtouched, lasttouched, j);
+                      } else {
+                          uniColor(currtouched, lasttouched, j);
+                      }
+                    }
+                  }
+                }
+
+                if (tmp != 0) {
+                  // draw meteor
+                  for (int p = 0; p < 1; p++) {
+                    if ((k - p < NUMPIXELS) && (k - p >= 0)) {
+                      setPixel(k - p, 0xaa, 0x00, 0xff);
+                    }
+                  }
+              
+                  pixels.show();
+                  delay(120);
                 }
               }
-            }
-          if (tmp != 0) {
-            meteorRain(0xaa, 0x00, 0xff, 1, 160, true, 120);
           }
         }
         run_meteor_effect = true;
         tmp = 1;
     }
+    
 
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 9)) {
       //pixels.clear();
       Serial.print("I was touched "); Serial.print(on); Serial.println(i);
         while (run_rainbow_fade_effect && on) {
-            currtouched = cap.touched();
-            for (uint8_t j = 0; j < 12; j++){
-              if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
-                Serial.print(j); Serial.println(" touched");
-                run_rainbow_fade_effect = false;
-                if (j == 0) {
-                  power(currtouched, lasttouched, j);
-                  tmp = j;
-                }
-              }
-            }
           if (tmp != 0) {
-            rainbow_fade(); 
+                for (int j = 0; j < (sizeof(colors)/sizeof(colors[0])); j++) {
+                    for (int h = 0; h < 102; h++) {
+                      currtouched = cap.touched();
+                      for (uint8_t s = 0; s < 12; s++){
+                        if ((currtouched & _BV(s)) && !(lasttouched & _BV(s)) && (i != s)) {
+                          Serial.print(j); Serial.println(" touched");
+                          run_rainbow_fade_effect = false;
+                          tmp = 0;
+                          if (s == 0) {
+                            power(currtouched, lasttouched, s);
+                          } else {
+                                uniColor(currtouched,lasttouched, s);
+                            }
+                        }
+                      }
+                      if (tmp != 0) {
+                      for (int s = 0; s < NUMPIXELS; s ++) {
+                        pixels.setPixelColor(s, colors[j]);
+                      }
+
+                      
+                      if (max_brightness == false) {
+                        if (brightness != 255) {
+                          brightness = brightness + 5;
+                        } 
+                        if (brightness == 255) {
+                          max_brightness = true;
+                          
+                        }
+                      } else {
+                        if (brightness != 0) {
+                          brightness = brightness - 5;
+                        } 
+                        if (brightness == 0) {
+                          max_brightness = false;
+                        }
+                      }
+                      pixels.show();
+                      pixels.setBrightness(brightness);
+                      delay(50);
+                    }
+                    }
+                  }
           }
         }
         run_rainbow_fade_effect = true;
         tmp = 1;
+        brightness = 0;
     }
 
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 10)) {
@@ -445,9 +527,11 @@ void loop() {
               if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
                 Serial.print(j); Serial.println(" touched");
                 run_fire_effect = false;
+                tmp = 0;
                 if (j == 0) {
                   power(currtouched, lasttouched, j);
-                  tmp = j;
+                } else {
+                    uniColor(currtouched, lasttouched, j);
                 }
               }
             }
@@ -472,9 +556,11 @@ void loop() {
               if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
                 Serial.print(j); Serial.println(" touched");
                 run_firefly_effect = false;
+                tmp = 0;
                  if (j == 0) {
                   power(currtouched, lasttouched, j);
-                  tmp = j;
+                } else {
+                    uniColor(currtouched, lasttouched, j);
                 }
               }
             }
