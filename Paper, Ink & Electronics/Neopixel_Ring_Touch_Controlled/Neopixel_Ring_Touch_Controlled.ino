@@ -2,18 +2,14 @@
 This code controls a Neopixel ring with the help of a 
 capacity sensor that acts as buttons for the different 
 effects and colors.
-
 Code for the Paper, Ink & Electronics modul @ Bauhaus-
 Universität Weimar.
-
 Author: Nicola Libera
-
 **********************************************************/
 
 #include <Wire.h>
 #include "Adafruit_MPR121.h"
 #include <Adafruit_NeoPixel.h>
-#include "FastLED.h"
 #ifdef __AVR__
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
@@ -35,7 +31,7 @@ uint16_t currtouched = 0;
 #define PIN 6 // On Trinket or Gemma, suggest changing this to 1
 
 #define MAX_GLOWING_PIXELS 4
-#define MIN_BRIGHTNESS 25
+#define MIN_BRIGHTNESS 50
 
 // Define number of NeoPixels that are attached to the Arduino
 #define NUMPIXELS 24 
@@ -61,6 +57,7 @@ uint32_t  colors[] = {red, green, blue, yellow, white, pink, cyan, orange};
 bool on = false;
 
 int brightness = 0;
+int uni_color_brightness = 255;
 bool max_brightness = false;
 bool run_fire_effect = true;
 bool run_rainbow_fade_effect = true;
@@ -76,9 +73,9 @@ void setup() {
   while (!Serial) { // needed to keep leonardo/micro from starting too fast!
     delay(10);
   }
-  
+
   Serial.println("Adafruit MPR121 Capacitive Touch sensor test"); 
-  
+
   // Default address is 0x5A, if tied to 3.3V its 0x5B
   // If tied to SDA its 0x5C and if SCL then 0x5D
   if (!cap.begin(0x5A)) {
@@ -97,7 +94,7 @@ void setup() {
   //pixels.setBrightness(brightness);
   pixels.show(); // Turn all the LEDs off
   Serial.println("Initialized Neopixels");
-  
+
 }
 
 // Fire simulator
@@ -130,7 +127,7 @@ void NeoFire::Draw() {
     uint32_t diff_color = pixels.Color ( r, r/2, r/2);
     SubstractColor(i, diff_color);
   }
-    
+
   pixels.show();
 }
 
@@ -152,15 +149,15 @@ uint32_t NeoFire::Blend(uint32_t color1, uint32_t color2) {
   uint8_t r1,g1,b1;
   uint8_t r2,g2,b2;
   uint8_t r3,g3,b3;
-  
+
   r1 = (uint8_t)(color1 >> 16),
   g1 = (uint8_t)(color1 >>  8),
   b1 = (uint8_t)(color1 >>  0);
-  
+
   r2 = (uint8_t)(color2 >> 16),
   g2 = (uint8_t)(color2 >>  8),
   b2 = (uint8_t)(color2 >>  0);
-  
+
   return pixels.Color(constrain(r1+r2, 0, 255), constrain(g1+g2, 0, 255), constrain(b1+b2, 0, 255));
 }
 
@@ -170,22 +167,22 @@ uint32_t NeoFire::Substract(uint32_t color1, uint32_t color2) {
   uint8_t r2,g2,b2;
   uint8_t r3,g3,b3;
   int16_t r,g,b;
-  
+
   r1 = (uint8_t)(color1 >> 16),
   g1 = (uint8_t)(color1 >>  8),
   b1 = (uint8_t)(color1 >>  0);
-  
+
   r2 = (uint8_t)(color2 >> 16),
   g2 = (uint8_t)(color2 >>  8),
   b2 = (uint8_t)(color2 >>  0);
-  
+
   r=(int16_t)r1-(int16_t)r2;
   g=(int16_t)g1-(int16_t)g2;
   b=(int16_t)b1-(int16_t)b2;
   if(r<0) r=0;
   if(g<0) g=0;
   if(b<0) b=0;
-  
+
   return pixels.Color(r, g, b);
 }
 
@@ -203,22 +200,22 @@ class Firefly {
     float _fadeSpeed;
     float _hue;
     boolean _isGlowing;
-    
+
   public:
     Firefly ();
-  
+
     float hueCenter;
     float hueRange;
     float baseSpeed;
     boolean isGlowing();    
     uint32_t getColor();
-    
+
     void ignite();
     void animate();    
 };
 
 Firefly::Firefly () {
-  hueCenter = 0.80;
+  hueCenter = 1.0;
   hueRange = 0.2;
   baseSpeed = 0.02;
   _brightness = 0.0;
@@ -240,9 +237,9 @@ void Firefly::animate() {
   if(!_isGlowing) {
     return;
   }
-  
+
   _brightness += _fadeSpeed;
-    
+
   if(_brightness > 1.0) {
     _brightness = 1.0;
     _fadeSpeed *= -0.3;
@@ -315,19 +312,44 @@ void power(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
     }
 }
 
+uint32_t AdjustBrightness(uint32_t color, uint16_t brightness) {  // 32-bit packet color value
+                                                                   // & 10-bit brightness value
+  uint32_t outcolor = 0;
+  uint8_t i = 3;
+  while ( i > 0) {
+    i--;                                         // decremet straight away, we want i in range 2 - 0
+    uint32_t col = (color >> ( i * 8)) & 0xFF;  // extract the R, G or B part.
+    col = col * brightness / 1024;             // do the brightness calculation
+    outcolor = (outcolor << 8) | col;         // add the new value to ooutcolor (and shift the previous values)
+  }
+  return outcolor;
+}
+
+void dimLEDs() {
+    if (on) { 
+      Serial.println("I was callled in dim");   
+    uni_color_brightness = (uni_color_brightness + 5) % 256;
+
+    if ((uni_color_brightness) < MIN_BRIGHTNESS) {
+        uni_color_brightness = MIN_BRIGHTNESS;
+    }
+    Serial.print("I am brightness "); Serial.println(uni_color_brightness);
+    for (int i = 0; i < NUMPIXELS; i++) {
+      pixels.setPixelColor(i, AdjustBrightness(start_color, uni_color_brightness));
+    }
+    pixels.show();
+  }
+}
+
 
 void selectColor(uint32_t col) {
   if (on) {
+    col = AdjustBrightness(col, uni_color_brightness);
     for (int i = 0; i < NUMPIXELS; i ++) {
       start_color = col;
       pixels.setPixelColor(i, start_color);
     }
     pixels.show();
-    if (col = pink) {
-      pixels.setBrightness(135);
-    } else {
-      pixels.setBrightness(240);
-    }
   }
 }
 
@@ -355,6 +377,10 @@ void uniColor(uint16_t currtouched, uint16_t lasttouched, uint8_t i) {
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 6)) {
         selectColor(green);
     }
+
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 7)) {
+        dimLEDs();
+    }
 }
 
 
@@ -368,10 +394,10 @@ void loop() {
 
   for (uint8_t i=0; i<12; i++) {    
     // it if *is* touched and *wasnt* touched before, alert!
-    /*if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
       Serial.print(i); Serial.println(" touched");
-    }*/
-    
+    }
+
     power(currtouched, lasttouched, i);
     uniColor(currtouched, lasttouched, i);
 
@@ -388,7 +414,7 @@ void loop() {
                   if ((!true) || (random(10) > 5)) {
                     fadeToBlack(p, 160);
                   }
-      
+
                   currtouched = cap.touched();
                   for (uint8_t j = 0; j < 12; j++){
                     if ((currtouched & _BV(j)) && !(lasttouched & _BV(j)) && (i != j)) {
@@ -410,7 +436,7 @@ void loop() {
                       setPixel(k - p, 0xaa, 0x00, 0xff);
                     }
                   }
-              
+
                   pixels.show();
                   delay(120);
                 }
@@ -420,7 +446,7 @@ void loop() {
         run_meteor_effect = true;
         tmp = 1;
     }
-    
+
 
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) && (i == 9)) {
 
@@ -445,14 +471,14 @@ void loop() {
                         pixels.setPixelColor(s, colors[j]);
                       }
 
-                      
+
                       if (max_brightness == false) {
                         if (brightness != 255) {
                           brightness = brightness + 5;
                         } 
                         if (brightness == 255) {
                           max_brightness = true;
-                          
+
                         }
                       } else {
                         if (brightness != 0) {
@@ -522,7 +548,7 @@ void loop() {
                   glowingPixelCount++;
                 }
               }
-              
+
               for(int i = 0; i < NUMPIXELS; i++) {
                 if(!flies[i].isGlowing() && glowingPixelCount < MAX_GLOWING_PIXELS && random(100) < 5) {
                   flies[i].ignite();
@@ -546,7 +572,7 @@ void loop() {
 
   // comment out this line for detailed data from the sensor!
   return;
-  
+
   // put a delay so it isn't overwhelming
   delay(100);
 }
